@@ -136,9 +136,6 @@
         // Use empty node options and don't debug while profiling to get the most accurate timing
         //"TYPESPEC_SERVER_NODE_OPTIONS": "",
 
-        // Set the telemetry key environment variable to use if you dont want to set it in package.json
-        //"TYPESPEC_VSCODE_TELEMETRY_KEY": "{The instrumentation key of your Application Insights}",
-
         // Enable debug logging for specific areas using TYPESPEC_DEBUG environment variable
         // Examples:
         //   "TYPESPEC_DEBUG": "server.compile"           - Enable server compilation debug logs
