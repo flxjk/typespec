@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalPassThroughEnv": [
+    "PLAYWRIGHT_BROWSERS_PATH",
     "TYPESPEC_WEBSITE_BASE_PATH",
     "TYPESPEC_NPM_REGISTRY",
     "TYPESPEC_SKIP_WEBSITE_BUILD",
