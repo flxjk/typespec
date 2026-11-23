@@ -5,8 +5,6 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using PlaygroundServer;
@@ -38,16 +36,6 @@ if (!string.IsNullOrEmpty(playgroundUrls))
         }
     }
 }
-
-// Application Insights instrumentation. The SDK reads the connection string from the
-// APPLICATIONINSIGHTS_CONNECTION_STRING environment variable (or ApplicationInsights:ConnectionString
-// configuration value). When neither is set, telemetry is silently dropped.
-builder.Services.AddApplicationInsightsTelemetry();
-var appInsightsConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
-    ?? builder.Configuration["ApplicationInsights:ConnectionString"];
-Console.WriteLine(string.IsNullOrWhiteSpace(appInsightsConnectionString)
-    ? "Application Insights connection string not set; telemetry disabled."
-    : "Application Insights telemetry enabled.");
 
 builder.Services.AddCors();
 var cacheSizeLimitBytes = builder.Configuration.GetValue<long?>("GenerationCache:SizeLimitBytes")
@@ -154,28 +142,11 @@ app.MapGet("/health", () =>
     });
 });
 
-app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, TelemetryClient? telemetryClient) =>
+app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache) =>
 {
-    var stopwatch = Stopwatch.StartNew();
-    var telemetryProperties = new Dictionary<string, string>();
-
-    void TrackGenerateEvent(GenerateOutcome outcome)
-    {
-        if (telemetryClient is null) return;
-        stopwatch.Stop();
-        var outcomeValue = outcome.ToTelemetryValue();
-        telemetryProperties["outcome"] = outcomeValue;
-        telemetryProperties["durationMs"] = stopwatch.Elapsed.TotalMilliseconds.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
-        var evt = new EventTelemetry("PlaygroundGenerate");
-        foreach (var kvp in telemetryProperties) evt.Properties[kvp.Key] = kvp.Value;
-        telemetryClient.TrackEvent(evt);
-        telemetryClient.GetMetric("PlaygroundGenerateDurationMs", "outcome").TrackValue(stopwatch.Elapsed.TotalMilliseconds, outcomeValue);
-    }
-
     // Validate content type
     if (!request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) ?? true)
     {
-        TrackGenerateEvent(GenerateOutcome.InvalidContentType);
         return Results.BadRequest(new { error = "Content-Type must be application/json" });
     }
 
@@ -187,30 +158,24 @@ app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, Tel
     }
     catch (JsonException)
     {
-        TrackGenerateEvent(GenerateOutcome.InvalidJson);
         return Results.BadRequest(new { error = "Invalid JSON in request body" });
     }
 
     if (body?.CodeModel is null || body?.Configuration is null)
     {
-        TrackGenerateEvent(GenerateOutcome.MissingFields);
         return Results.BadRequest(new { error = "Missing 'codeModel' or 'configuration' fields" });
     }
 
     var generatorName = body.GeneratorName ?? GeneratorRegistry.DefaultGeneratorName;
-    telemetryProperties["generatorName"] = generatorName;
-    telemetryProperties["codeModelSizeBytes"] = body.CodeModel.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     var selectedGeneratorPath = generators.GetPath(generatorName);
     if (selectedGeneratorPath is null)
     {
-        TrackGenerateEvent(GenerateOutcome.UnsupportedGenerator);
         return Results.BadRequest(new { error = $"Unsupported generator: {generatorName}" });
     }
 
     if (!File.Exists(selectedGeneratorPath))
     {
-        TrackGenerateEvent(GenerateOutcome.GeneratorMissing);
         return Results.StatusCode(503);
     }
 
@@ -219,13 +184,10 @@ app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, Tel
     if (cache.TryGet(cacheKey, out var cached) && cached is not null)
     {
         request.HttpContext.Response.Headers["X-Cache"] = "HIT";
-        telemetryProperties["cacheStatus"] = "hit";
-        TrackGenerateEvent(GenerateOutcome.Success);
         return Results.Bytes(cached.Body, cached.ContentType);
     }
 
     request.HttpContext.Response.Headers["X-Cache"] = "MISS";
-    telemetryProperties["cacheStatus"] = "miss";
 
     // Create a temporary working directory
     var tempDir = Path.Combine(Path.GetTempPath(), "tsp-playground", Guid.NewGuid().ToString("N"));
@@ -277,7 +239,6 @@ app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, Tel
         catch (OperationCanceledException)
         {
             process.Kill(entireProcessTree: true);
-            TrackGenerateEvent(GenerateOutcome.Timeout);
             return Results.Json(
                 new GenerateErrorResponse("Generator timed out", $"Process did not complete within {GeneratorTimeoutSeconds} seconds"),
                 GenerateJsonContext.Default.GenerateErrorResponse,
@@ -287,16 +248,10 @@ app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, Tel
 
         var exitCode = process.ExitCode;
         Console.WriteLine($"Generator exited with code {exitCode}");
-        telemetryProperties["exitCode"] = exitCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (exitCode != 0)
         {
             var stderrTail = string.Join("\n", stderrLines.TakeLast(50));
-            telemetryClient?.TrackTrace(
-                $"Generator failed (exit {exitCode}): {stderrTail}",
-                SeverityLevel.Error,
-                telemetryProperties);
-            TrackGenerateEvent(GenerateOutcome.GeneratorFailed);
             return Results.Json(
                 new GenerateErrorResponse($"Generator failed with exit code {exitCode}", stderrTail),
                 GenerateJsonContext.Default.GenerateErrorResponse,
@@ -320,24 +275,11 @@ app.MapPost("/generate", async (HttpRequest request, IGenerationCache cache, Tel
             }
         }
 
-        telemetryProperties["generatedFileCount"] = files.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        TrackGenerateEvent(GenerateOutcome.Success);
         var responseBytes = JsonSerializer.SerializeToUtf8Bytes(
             new GenerateResponse(files),
             GenerateJsonContext.Default.GenerateResponse);
         cache.Set(cacheKey, new CachedGenerationResponse(responseBytes, "application/json"));
         return Results.Bytes(responseBytes, "application/json");
-    }
-    catch (Exception ex)
-    {
-        if (telemetryClient is not null)
-        {
-            var exTelemetry = new ExceptionTelemetry(ex);
-            foreach (var kvp in telemetryProperties) exTelemetry.Properties[kvp.Key] = kvp.Value;
-            telemetryClient.TrackException(exTelemetry);
-        }
-        TrackGenerateEvent(GenerateOutcome.Exception);
-        throw;
     }
     finally
     {

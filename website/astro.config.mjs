@@ -11,7 +11,6 @@ import { resolve } from "pathe";
 import rehypeMermaid from "rehype-mermaid";
 import remarkHeadingID from "remark-heading-id";
 import current from "./src/content/current-sidebar";
-import { computeSriHash } from "./src/utils/sri-hash";
 
 /** Scan the release-notes directory and return the slug of the latest release note. */
 function getLatestReleaseNoteSlug() {
@@ -43,8 +42,6 @@ function getLatestReleaseNoteSlug() {
 const latestReleaseNote = getLatestReleaseNoteSlug();
 
 const base = process.env.TYPESPEC_WEBSITE_BASE_PATH ?? "/";
-
-const initJsIntegrity = computeSriHash("1ds-init.js");
 
 /**
  * Detect whether a Playwright browser can be launched.
@@ -127,24 +124,6 @@ export default defineConfig({
         Sidebar: "./src/components/starlight-overrides/Sidebar.astro",
       },
       expressiveCode: false, // defined directly above
-      head: [
-        {
-          tag: "script",
-          attrs: {
-            src: "https://consentdeliveryfd.azurefd.net/mscc/lib/v2/wcp-consent.js",
-            crossorigin: "anonymous",
-          },
-        },
-        {
-          tag: "script",
-          attrs: {
-            type: "module",
-            async: true,
-            src: "1ds-init.js",
-            integrity: initJsIntegrity,
-          },
-        },
-      ],
       social: [
         {
           label: "GitHub",

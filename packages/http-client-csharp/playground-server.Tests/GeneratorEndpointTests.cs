@@ -53,7 +53,6 @@ public class GeneratorEndpointTests
         info.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:0";
         info.Environment["APPLICATIONINSIGHTS_CONNECTION_STRING"] =
             "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=http://127.0.0.1:1";
-        info.Environment["ApplicationInsights__DisableTelemetry"] = "true";
         foreach (var variable in new[] { "TEMP", "TMP", "TMPDIR" })
         {
             info.Environment[variable] = _temporaryRoot;

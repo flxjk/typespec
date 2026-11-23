@@ -88,7 +88,6 @@ catalog:
   "@vitejs/plugin-react": ^6.3.0
   "@vitest/coverage-v8": ^5.1.0
   "@vitest/ui": ^5.1.0
-  "@vscode/extension-telemetry": ^1.5.2
   "@vscode/test-electron": ^3.1.0
   "@vscode/test-web": ^0.0.81
   "@vscode/vsce": ^4.1.0

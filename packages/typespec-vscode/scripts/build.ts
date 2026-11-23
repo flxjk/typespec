@@ -15,7 +15,7 @@ const nodeContext = await context({
   bundle: true,
   outfile: "dist/src/extension.cjs",
   platform: "node",
-  mainFields: ["module", "main"], // app insights web https://www.npmjs.com/package/@microsoft/applicationinsights-web-basic uses module instead of exports...
+  mainFields: ["module", "main"],
   target: "node22",
   format: "cjs",
   sourcemap: true,
@@ -27,7 +27,7 @@ const webContext = await context({
   entryPoints: ["src/web/extension.ts"],
   bundle: true,
   outfile: "dist/src/web/extension.js",
-  mainFields: ["module", "main"], // app insights web https://www.npmjs.com/package/@microsoft/applicationinsights-web-basic uses module instead of exports...
+  mainFields: ["module", "main"],
   platform: "browser",
   format: "cjs",
   sourcemap: true,
@@ -39,7 +39,7 @@ const webTestContext = await context({
   entryPoints: ["test/web/suite.ts"],
   bundle: true,
   outfile: "dist/test/web/suite.js",
-  mainFields: ["module", "main"], // app insights web https://www.npmjs.com/package/@microsoft/applicationinsights-web-basic uses module instead of exports...
+  mainFields: ["module", "main"],
   platform: "browser",
   format: "cjs",
   external: ["vscode"],
